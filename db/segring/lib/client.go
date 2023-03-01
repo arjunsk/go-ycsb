@@ -15,18 +15,17 @@ const (
 func main() {
 	c := NewClient()
 
-	c.Add("1", []byte("Arjun"))
-	c.Add("2", []byte("Sangeetha"))
+	c.Add("1", []byte("Alice"))
+	c.Add("2", []byte("Bob"))
 
 	a := c.Scan("1", 2)
 	for _, v := range a {
 		fmt.Println(string(v))
 	}
-	//c.Add("1", []byte("Arjun"))
-	//fmt.Println(string(c.Read("2")))
-	//
-	////c.Delete("1")
-	//fmt.Println(string(c.Read("1")))
+
+	c.Delete("1")
+	fmt.Println(string(c.Read("1")))
+	fmt.Println(string(c.Read("2")))
 
 }
 
