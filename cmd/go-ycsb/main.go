@@ -50,6 +50,8 @@ import (
 	_ "github.com/pingcap/go-ycsb/db/aerospike"
 	// Register Badger database
 	_ "github.com/pingcap/go-ycsb/db/badger"
+	// Register Segment Ring
+	_ "github.com/pingcap/go-ycsb/db/segring"
 	// Register FoundationDB database
 	_ "github.com/pingcap/go-ycsb/db/foundationdb"
 	// Register RocksDB database
