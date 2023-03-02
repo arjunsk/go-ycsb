@@ -27,6 +27,7 @@ type Client struct {
 }
 
 func NewClient() *Client {
+	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 100
 	return &Client{client: &http.Client{}}
 }
 
