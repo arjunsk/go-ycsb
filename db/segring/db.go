@@ -16,6 +16,7 @@ type tsw struct {
 }
 
 func (db *tsw) Close() error {
+	db.db.Close()
 	return nil
 }
 

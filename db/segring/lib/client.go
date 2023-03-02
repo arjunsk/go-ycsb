@@ -29,6 +29,14 @@ func main() {
 
 }
 
+type IClient interface {
+	Put(k string, v []byte)
+	Get(key string) []byte
+	Scan(lKey string, count int) [][]byte
+	Delete(k string)
+	Close()
+}
+
 type Client struct {
 	client *http.Client
 }
@@ -68,6 +76,10 @@ func (c *Client) Scan(lKey string, count int) [][]byte {
 func (c *Client) Delete(k string) {
 	req, _ := http.NewRequest(http.MethodDelete, baseURL+"/delete/"+k, nil)
 	readBytes(c, req)
+}
+
+func (c *Client) Close() {
+	c.client.CloseIdleConnections()
 }
 
 func readBytes(c *Client, req *http.Request) []byte {
