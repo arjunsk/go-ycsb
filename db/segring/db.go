@@ -42,7 +42,7 @@ func (db *tsw) Insert(ctx context.Context, table string, key string, values map[
 	if err != nil {
 		return err
 	}
-	db.db.Add(rowKey, buf)
+	db.db.Put(rowKey, buf)
 
 	return nil
 }
@@ -50,7 +50,7 @@ func (db *tsw) Insert(ctx context.Context, table string, key string, values map[
 func (db *tsw) Read(ctx context.Context, table string, key string, fields []string) (map[string][]byte, error) {
 	var m map[string][]byte
 	rowKey := db.getRowKey(table, key)
-	row := db.db.Read(rowKey)
+	row := db.db.Get(rowKey)
 	m, _ = db.r.Decode(row, fields)
 	return m, nil
 }
@@ -84,7 +84,7 @@ func (db *tsw) Update(ctx context.Context, table string, key string, values map[
 	if err != nil {
 		return err
 	}
-	db.db.Add(rowKey, buf)
+	db.db.Put(rowKey, buf)
 
 	return nil
 }

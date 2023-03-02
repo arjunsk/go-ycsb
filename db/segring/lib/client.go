@@ -9,14 +9,14 @@ import (
 )
 
 const (
-	baseURL = "http://0.0.0.0:9090"
+	baseURL = "http://0.0.0.0:8080"
 )
 
 func main() {
 	c := NewClient()
 
-	c.Add("1", []byte("Alice"))
-	c.Add("2", []byte("Bob"))
+	c.Put("1", []byte("Alice"))
+	c.Put("2", []byte("Bob"))
 
 	a := c.Scan("1", 2)
 	for _, v := range a {
@@ -24,8 +24,8 @@ func main() {
 	}
 
 	c.Delete("1")
-	fmt.Println(string(c.Read("1")))
-	fmt.Println(string(c.Read("2")))
+	fmt.Println(string(c.Get("1")))
+	fmt.Println(string(c.Get("2")))
 
 }
 
@@ -37,26 +37,19 @@ func NewClient() *Client {
 	return &Client{client: &http.Client{}}
 }
 
-func (c *Client) Add(k string, v []byte) {
-	req, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/table/"+k, bytes.NewBuffer(v))
-	resp, _ := c.client.Do(req)
-	defer resp.Body.Close()
+func (c *Client) Put(k string, v []byte) {
+	req, _ := http.NewRequest(http.MethodPost, baseURL+"/put/"+k, bytes.NewBuffer(v))
+	readBytes(c, req)
 }
 
-func (c *Client) Read(key string) []byte {
-	req, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/table/"+key, nil)
-	resp, _ := c.client.Do(req)
-	defer resp.Body.Close()
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	return bodyBytes
-
+func (c *Client) Get(key string) []byte {
+	req, _ := http.NewRequest(http.MethodGet, baseURL+"/get/"+key, nil)
+	return readBytes(c, req)
 }
 
 func (c *Client) Scan(lKey string, count int) [][]byte {
-	req, _ := http.NewRequest(http.MethodPut, baseURL+"/api/v1/table/"+lKey+"/"+fmt.Sprint(count), nil)
-	resp, _ := c.client.Do(req)
-	defer resp.Body.Close()
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	req, _ := http.NewRequest(http.MethodGet, baseURL+"/scan/"+lKey+"/"+fmt.Sprint(count), nil)
+	bodyBytes := readBytes(c, req)
 
 	var res [][]byte
 	for len(bodyBytes) > 0 {
@@ -73,7 +66,20 @@ func (c *Client) Scan(lKey string, count int) [][]byte {
 }
 
 func (c *Client) Delete(k string) {
-	req, _ := http.NewRequest(http.MethodDelete, baseURL+"/api/v1/table/"+k, nil)
-	resp, _ := c.client.Do(req)
-	defer resp.Body.Close()
+	req, _ := http.NewRequest(http.MethodDelete, baseURL+"/delete/"+k, nil)
+	readBytes(c, req)
+}
+
+func readBytes(c *Client, req *http.Request) []byte {
+	resp, err := c.client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	err = resp.Body.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	return bodyBytes
 }
