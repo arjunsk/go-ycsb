@@ -1,4 +1,4 @@
-package lib
+package rest
 
 import (
 	"bytes"
@@ -12,23 +12,6 @@ const (
 	baseURL = "http://0.0.0.0:8080"
 )
 
-func main() {
-	c := NewClient()
-
-	c.Put("1", []byte("Alice"))
-	c.Put("2", []byte("Bob"))
-
-	a := c.Scan("1", 2)
-	for _, v := range a {
-		fmt.Println(string(v))
-	}
-
-	c.Delete("1")
-	fmt.Println(string(c.Get("1")))
-	fmt.Println(string(c.Get("2")))
-
-}
-
 type IClient interface {
 	Put(k string, v []byte)
 	Get(key string) []byte
@@ -36,6 +19,8 @@ type IClient interface {
 	Delete(k string)
 	Close()
 }
+
+var _ IClient = new(Client)
 
 type Client struct {
 	client *http.Client
@@ -92,6 +77,5 @@ func readBytes(c *Client, req *http.Request) []byte {
 	if err != nil {
 		panic(err)
 	}
-
 	return bodyBytes
 }

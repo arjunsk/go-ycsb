@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/magiconair/properties"
-	"github.com/pingcap/go-ycsb/db/segring/lib"
+	"github.com/pingcap/go-ycsb/db/segring/rest"
 	"github.com/pingcap/go-ycsb/pkg/util"
 	"github.com/pingcap/go-ycsb/pkg/ycsb"
 )
 
 type tsw struct {
-	db      *lib.Client
+	db      *rest.Client
 	bufPool *util.BufPool
 	r       *util.RowCodec
 }
@@ -105,7 +105,7 @@ type tswCreator struct {
 
 func (t tswCreator) Create(p *properties.Properties) (ycsb.DB, error) {
 	return &tsw{
-		db:      lib.NewClient(),
+		db:      rest.NewClient(),
 		r:       util.NewRowCodec(p),
 		bufPool: util.NewBufPool(),
 	}, nil
