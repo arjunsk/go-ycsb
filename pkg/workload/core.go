@@ -246,8 +246,7 @@ func (c *core) buildDeterministicValue(state *coreState, key string, fieldKey st
 
 func (c *core) verifyRow(state *coreState, key string, values map[string][]byte) {
 	if len(values) == 0 {
-		// null data here, need panic?
-		return
+		util.Fatalf("length of value should not be zero")
 	}
 
 	for fieldKey, value := range values {
