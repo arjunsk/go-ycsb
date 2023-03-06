@@ -37,7 +37,7 @@ cd ../..
 
 ```shell
 cd ../..
-./bin/go-ycsb run memtable -P workloads/workloade -p operationcount=5000000 -p recordcount=5000000 -p threadcount=10 -p dataintegrity=true -p minscanlength=1 -p maxscanlength=1000 -p scanlengthdistribution=uniform
+./bin/go-ycsb run memtable -P workloads/workloade -p requestdistribution=sequential -p operationcount=5000000 -p recordcount=5000000 -p threadcount=10 -p dataintegrity=true -p minscanlength=1 -p maxscanlength=1000 -p scanlengthdistribution=uniform
 ```
 
 
