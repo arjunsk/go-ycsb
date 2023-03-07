@@ -1,6 +1,4 @@
-# GO-YCSB Benchmarking commands
-
-## Workload E
+# Workload E
 Description: Scan the latest insert (90% read, 10% insert)
 
 We are using the properties
@@ -20,6 +18,3 @@ cd ../..
 cd ../..
 ./bin/go-ycsb run memtable -P workloads/workloade -p operationcount=5000000 -p recordcount=5000000 -p threadcount=10 -p dataintegrity=true -p minscanlength=1 -p maxscanlength=1000 -p scanlengthdistribution=uniform
 ```
-
-
-## Workload A
