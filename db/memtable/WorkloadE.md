@@ -1,5 +1,5 @@
 # Workload E
-Description: Scan the latest insert (90% read, 10% insert)
+Description: Scan the latest insert - 90% scan, 10% insert
 
 We are using the properties
 - operation count = 5M

@@ -1,5 +1,5 @@
 # Workload C
-Description: Scan the latest insert (90% read, 10% insert)
+Description: Read only - 100% read
 
 We are using the properties
 - operation count = 5M
