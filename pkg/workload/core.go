@@ -271,7 +271,7 @@ func (c *core) DoInsert(ctx context.Context, db ycsb.DB) error {
 	var err error
 	for {
 		err = db.Insert(ctx, c.table, dbKey, values)
-		if err == nil {
+		if err != nil {
 			break
 		}
 
@@ -326,7 +326,7 @@ func (c *core) DoBatchInsert(ctx context.Context, batchSize int, db ycsb.DB) err
 	var err error
 	for {
 		err = batchDB.BatchInsert(ctx, c.table, keys, values)
-		if err == nil {
+		if err != nil {
 			break
 		}
 
@@ -620,6 +620,7 @@ func (coreCreator) Create(p *properties.Properties) (ycsb.Workload, error) {
 	}
 
 	requestDistrib := p.GetString(prop.RequestDistribution, prop.RequestDistributionDefault)
+	minScanLength := p.GetInt64(prop.MinScanLength, prop.MinScanLengthDefault)
 	maxScanLength := p.GetInt64(prop.MaxScanLength, prop.MaxScanLengthDefault)
 	scanLengthDistrib := p.GetString(prop.ScanLengthDistribution, prop.ScanLengthDistributionDefault)
 
@@ -679,9 +680,9 @@ func (coreCreator) Create(p *properties.Properties) (ycsb.Workload, error) {
 	c.fieldChooser = generator.NewUniform(0, c.fieldCount-1)
 	switch scanLengthDistrib {
 	case "uniform":
-		c.scanLength = generator.NewUniform(1, maxScanLength)
+		c.scanLength = generator.NewUniform(minScanLength, maxScanLength)
 	case "zipfian":
-		c.scanLength = generator.NewZipfianWithRange(1, maxScanLength, generator.ZipfianConstant)
+		c.scanLength = generator.NewZipfianWithRange(minScanLength, maxScanLength, generator.ZipfianConstant)
 	default:
 		util.Fatalf("distribution %s not allowed for scan length", scanLengthDistrib)
 	}
