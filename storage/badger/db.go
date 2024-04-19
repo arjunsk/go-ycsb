@@ -815,7 +815,8 @@ func exists(path string) (bool, error) {
 		return true, nil
 	}
 	if os.IsNotExist(err) {
-		return false, nil
+		return true, os.MkdirAll(path, 0755)
+		//return false, nil
 	}
 	return true, err
 }
