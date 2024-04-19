@@ -23,7 +23,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dgraph-io/badger/y"
+	"github.com/pingcap/go-ycsb/storage/badger/y"
 	"github.com/stretchr/testify/require"
 )
 

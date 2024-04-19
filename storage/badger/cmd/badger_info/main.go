@@ -36,7 +36,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dgraph-io/badger"
+	"github.com/pingcap/go-ycsb/storage/badger"
 	"github.com/pingcap/go-ycsb/storage/badger/table"
 )
 

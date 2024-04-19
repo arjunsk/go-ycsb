@@ -25,8 +25,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dgraph-io/badger/y"
 	farm "github.com/dgryski/go-farm"
+	"github.com/pingcap/go-ycsb/storage/badger/y"
 	"github.com/pkg/errors"
 )
 
