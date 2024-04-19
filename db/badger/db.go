@@ -95,7 +95,7 @@ func getOptions(p *properties.Properties) badger.Options {
 	opts.ValueDir = p.GetString(badgerValueDir, opts.Dir)
 
 	opts.SyncWrites = p.GetBool(badgerSyncWrites, false)
-	opts.NumVersionsToKeep = p.GetInt(badgerNumVersionsToKeep, 1)
+	//opts.NumVersionsToKeep = p.GetInt(badgerNumVersionsToKeep, 1)
 	opts.MaxTableSize = p.GetInt64(badgerMaxTableSize, 64<<20)
 	opts.LevelSizeMultiplier = p.GetInt(badgerLevelSizeMultiplier, 10)
 	opts.MaxLevels = p.GetInt(badgerMaxLevels, 7)
@@ -105,7 +105,7 @@ func getOptions(p *properties.Properties) badger.Options {
 	opts.NumLevelZeroTablesStall = p.GetInt(badgerNumLevelZeroTablesStall, 10)
 	opts.LevelOneSize = p.GetInt64(badgerLevelOneSize, 256<<20)
 	opts.ValueLogFileSize = p.GetInt64(badgerValueLogFileSize, 1<<30)
-	opts.ValueLogMaxEntries = uint32(p.GetUint64(badgerValueLogMaxEntries, 1000000))
+	//opts.ValueLogMaxEntries = uint32(p.GetUint64(badgerValueLogMaxEntries, 1000000))
 	opts.NumCompactors = p.GetInt(badgerNumCompactors, 3)
 	opts.DoNotCompact = p.GetBool(badgerDoNotCompact, false)
 	if b := p.GetString(badgerTableLoadingMode, "LoadToRAM"); len(b) > 0 {
@@ -118,13 +118,13 @@ func getOptions(p *properties.Properties) badger.Options {
 		}
 	}
 	if b := p.GetString(badgerValueLogLoadingMode, "MemoryMap"); len(b) > 0 {
-		if b == "FileIO" {
-			opts.ValueLogLoadingMode = options.FileIO
-		} else if b == "LoadToRAM" {
-			opts.ValueLogLoadingMode = options.LoadToRAM
-		} else if b == "MemoryMap" {
-			opts.ValueLogLoadingMode = options.MemoryMap
-		}
+		//if b == "FileIO" {
+		//	opts.ValueLogLoadingMode = options.FileIO
+		//} else if b == "LoadToRAM" {
+		//	opts.ValueLogLoadingMode = options.LoadToRAM
+		//} else if b == "MemoryMap" {
+		//	opts.ValueLogLoadingMode = options.MemoryMap
+		//}
 	}
 
 	return opts
