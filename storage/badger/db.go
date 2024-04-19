@@ -19,7 +19,9 @@ package badger
 import (
 	"bytes"
 	"container/heap"
+	"context"
 	"expvar"
+	"github.com/pingcap/go-ycsb/storage/badger/segring"
 	"log"
 	"math"
 	"os"
@@ -30,7 +32,6 @@ import (
 
 	"golang.org/x/net/trace"
 
-	"github.com/pingcap/go-ycsb/storage/badger/skl"
 	"github.com/pingcap/go-ycsb/storage/badger/table"
 	"github.com/pingcap/go-ycsb/storage/badger/y"
 	"github.com/pkg/errors"
@@ -50,6 +51,8 @@ type closers struct {
 	valueGC    *y.Closer
 }
 
+const MaxNodeSize = 94
+
 // DB provides the various functions required to interact with Badger.
 // DB is thread-safe.
 type DB struct {
@@ -61,8 +64,7 @@ type DB struct {
 
 	closers   closers
 	elog      trace.EventLog
-	mt        *skl.Skiplist   // Our latest (actively written) in-memory table
-	imm       []*skl.Skiplist // Add here only AFTER pushing to flushChan.
+	mt        *segring.SegRing
 	opt       Options
 	manifest  *manifestFile
 	lc        *levelsController
@@ -70,6 +72,7 @@ type DB struct {
 	vptr      valuePointer // less than or equal to a pointer to the last vlog value put into mt
 	writeCh   chan *request
 	flushChan chan flushTask // For flushing memtables.
+	canFn     context.CancelFunc
 
 	// Incremented in the non-concurrently accessed write loop.  But also accessed outside. So
 	// we use an atomic op.
@@ -92,10 +95,6 @@ func replayFunction(out *DB) func(entry, valuePointer) error {
 	var lastCommit uint64
 
 	toLSM := func(nk []byte, vs y.ValueStruct) {
-		for err := out.ensureRoomForWrite(); err != nil; err = out.ensureRoomForWrite() {
-			out.elog.Printf("Replay: Making room for writes")
-			time.Sleep(10 * time.Millisecond)
-		}
 		out.mt.Put(nk, vs)
 	}
 
@@ -167,7 +166,7 @@ func replayFunction(out *DB) func(entry, valuePointer) error {
 // Open returns a new DB object.
 func Open(opt Options) (db *DB, err error) {
 	opt.maxBatchSize = (15 * opt.MaxTableSize) / 100
-	opt.maxBatchCount = opt.maxBatchSize / int64(skl.MaxNodeSize)
+	opt.maxBatchCount = opt.maxBatchSize / int64(MaxNodeSize)
 
 	for _, path := range []string{opt.Dir, opt.ValueDir} {
 		dirExists, err := exists(path)
@@ -223,14 +222,13 @@ func Open(opt Options) (db *DB, err error) {
 
 	orc := &oracle{
 		isManaged:      opt.ManagedTxns,
-		nextCommit:     1,
+		nextCommit:     uint64(time.Now().UnixNano()),
 		pendingCommits: make(map[uint64]struct{}),
 		commits:        make(map[uint64]uint64),
 	}
 	heap.Init(&orc.commitMark)
 
 	db = &DB{
-		imm:           make([]*skl.Skiplist, 0, opt.NumMemtables),
 		flushChan:     make(chan flushTask, opt.NumMemtables),
 		writeCh:       make(chan *request, kvWriteChCapacity),
 		opt:           opt,
@@ -243,7 +241,11 @@ func Open(opt Options) (db *DB, err error) {
 
 	db.closers.updateSize = y.NewCloser(1)
 	go db.updateSize(db.closers.updateSize)
-	db.mt = skl.NewSkiplist(arenaSize(opt))
+	flushInterval := 30 * time.Second // 5sec, 30sec, 1m
+	ttl := 3 * time.Minute            // 3min
+	ctx, canFn := context.WithCancel(context.Background())
+	db.canFn = canFn
+	db.mt = segring.New(flushInterval, ttl, ctx)
 
 	// newLevelsController potentially loads files in directory.
 	if db.lc, err = newLevelsController(db, &manifest); err != nil {
@@ -288,7 +290,7 @@ func Open(opt Options) (db *DB, err error) {
 
 	replayCloser.SignalAndWait() // Wait for replay to be applied first.
 	// Now that we have the curRead, we can update the nextCommit.
-	db.orc.nextCommit = db.orc.curRead + 1
+	db.orc.nextCommit = uint64(time.Now().UnixNano())
 
 	// Mmap writable log
 	lf := db.vlog.filesMap[db.vlog.maxFid]
@@ -302,6 +304,8 @@ func Open(opt Options) (db *DB, err error) {
 
 	db.closers.valueGC = y.NewCloser(1)
 	go db.vlog.waitOnGC(db.closers.valueGC)
+
+	go db.flushMemtablePeriodically(flushInterval)
 
 	valueDirLockGuard = nil
 	dirLockGuard = nil
@@ -337,9 +341,8 @@ func (db *DB) Close() (err error) {
 				defer db.Unlock()
 				y.AssertTrue(db.mt != nil)
 				select {
-				case db.flushChan <- flushTask{db.mt, db.vptr}:
-					db.imm = append(db.imm, db.mt) // Flusher will attempt to remove this from s.imm.
-					db.mt = nil                    // Will segfault if we try writing!
+				case db.flushChan <- flushTask{db.mt.GetCurrSegment(), db.vptr}:
+					//db.mt.Close()
 					db.elog.Printf("pushed to flush chan\n")
 					return true
 				default:
@@ -359,6 +362,8 @@ func (db *DB) Close() (err error) {
 
 	db.closers.memtable.Wait()
 	db.elog.Printf("Memtable flushed")
+
+	db.canFn()
 
 	db.closers.compactors.SignalAndWait()
 	db.elog.Printf("Compaction finished")
@@ -416,43 +421,12 @@ func syncDir(dir string) error {
 	return errors.Wrapf(closeErr, "While closing directory: %s.", dir)
 }
 
-// getMemtables returns the current memtables and get references.
-func (db *DB) getMemTables() ([]*skl.Skiplist, func()) {
-	db.RLock()
-	defer db.RUnlock()
-
-	tables := make([]*skl.Skiplist, len(db.imm)+1)
-
-	// Get mutable memtable.
-	tables[0] = db.mt
-	tables[0].IncrRef()
-
-	// Get immutable memtables.
-	last := len(db.imm) - 1
-	for i := range db.imm {
-		tables[i+1] = db.imm[last-i]
-		tables[i+1].IncrRef()
-	}
-	return tables, func() {
-		for _, tbl := range tables {
-			tbl.DecrRef()
-		}
-	}
-}
-
 // get returns the value in memtable or disk for given key.
 // Note that value will include meta byte.
 func (db *DB) get(key []byte) (y.ValueStruct, error) {
-	tables, decr := db.getMemTables() // Lock should be released.
-	defer decr()
-
-	y.NumGets.Add(1)
-	for i := 0; i < len(tables); i++ {
-		vs := tables[i].Get(key)
-		y.NumMemtableGets.Add(1)
-		if vs.Meta != 0 || vs.Value != nil {
-			return vs, nil
-		}
+	vs := db.mt.Get(key)
+	if vs.Meta != 0 || vs.Value != nil {
+		return vs, nil
 	}
 	return db.lc.get(key)
 }
@@ -543,17 +517,6 @@ func (db *DB) writeRequests(reqs []*request) error {
 			continue
 		}
 		count += len(b.Entries)
-		for err := db.ensureRoomForWrite(); err != nil; err = db.ensureRoomForWrite() {
-			db.elog.Printf("Making room for writes")
-			// We need to poll a bit because both hasRoomForWrite and the flusher need access to s.imm.
-			// When flushChan is full and you are blocked there, and the flusher is trying to update s.imm,
-			// you will get a deadlock.
-			time.Sleep(10 * time.Millisecond)
-		}
-		if err != nil {
-			done(err)
-			return errors.Wrap(err, "writeRequests")
-		}
 		if err := db.writeToLSM(b); err != nil {
 			done(err)
 			return errors.Wrap(err, "writeRequests")
@@ -689,50 +652,16 @@ func (db *DB) batchSetAsync(entries []*entry, f func(error)) error {
 
 var errNoRoom = errors.New("No room for write")
 
-// ensureRoomForWrite is always called serially.
-func (db *DB) ensureRoomForWrite() error {
-	var err error
-	db.Lock()
-	defer db.Unlock()
-	if db.mt.MemSize() < db.opt.MaxTableSize {
-		return nil
-	}
-
-	y.AssertTrue(db.mt != nil) // A nil mt indicates that DB is being closed.
-	select {
-	case db.flushChan <- flushTask{db.mt, db.vptr}:
-		db.elog.Printf("Flushing value log to disk if async mode.")
-		// Ensure value log is synced to disk so this memtable's contents wouldn't be lost.
-		err = db.vlog.sync()
-		if err != nil {
-			return err
-		}
-
-		db.elog.Printf("Flushing memtable, mt.size=%d size of flushChan: %d\n",
-			db.mt.MemSize(), len(db.flushChan))
-		// We manage to push this task. Let's modify imm.
-		db.imm = append(db.imm, db.mt)
-		db.mt = skl.NewSkiplist(arenaSize(db.opt))
-		// New memtable is empty. We certainly have room.
-		return nil
-	default:
-		// We need to do this to unlock and allow the flusher to modify imm.
-		return errNoRoom
-	}
-}
-
-func arenaSize(opt Options) int64 {
-	return opt.MaxTableSize + opt.maxBatchSize + opt.maxBatchCount*int64(skl.MaxNodeSize)
-}
-
 // WriteLevel0Table flushes memtable. It drops deleteValues.
-func writeLevel0Table(s *skl.Skiplist, f *os.File) error {
+func writeLevel0Table(s *segring.Segment, f *os.File) error {
 	iter := s.NewIterator()
 	defer iter.Close()
 	b := table.NewTableBuilder()
 	defer b.Close()
 	for iter.SeekToFirst(); iter.Valid(); iter.Next() {
-		if err := b.Add(iter.Key(), iter.Value()); err != nil {
+		k := iter.Key()
+		v := iter.Value()
+		if err := b.Add(k, v); err != nil {
 			return err
 		}
 	}
@@ -741,7 +670,7 @@ func writeLevel0Table(s *skl.Skiplist, f *os.File) error {
 }
 
 type flushTask struct {
-	mt   *skl.Skiplist
+	imt  *segring.Segment
 	vptr valuePointer
 }
 
@@ -749,11 +678,11 @@ func (db *DB) flushMemtable(lc *y.Closer) error {
 	defer lc.Done()
 
 	for ft := range db.flushChan {
-		if ft.mt == nil {
+		if ft.imt == nil {
 			return nil
 		}
 
-		if !ft.mt.Empty() {
+		if !ft.imt.Empty() {
 			// Store badger head even if vptr is zero, need it for readTs
 			db.elog.Printf("Storing offset: %+v\n", ft.vptr)
 			offset := make([]byte, vptrSize)
@@ -762,7 +691,7 @@ func (db *DB) flushMemtable(lc *y.Closer) error {
 			// Pick the max commit ts, so in case of crash, our read ts would be higher than all the
 			// commits.
 			headTs := y.KeyWithTs(head, db.orc.commitTs())
-			ft.mt.Put(headTs, y.ValueStruct{Value: offset})
+			ft.imt.Put(headTs, y.ValueStruct{Value: offset})
 		}
 
 		fileID := db.lc.reserveFileID()
@@ -775,7 +704,7 @@ func (db *DB) flushMemtable(lc *y.Closer) error {
 		dirSyncCh := make(chan error)
 		go func() { dirSyncCh <- syncDir(db.opt.Dir) }()
 
-		err = writeLevel0Table(ft.mt, fd)
+		err = writeLevel0Table(ft.imt, fd)
 		dirSyncErr := <-dirSyncCh
 
 		if err != nil {
@@ -801,9 +730,10 @@ func (db *DB) flushMemtable(lc *y.Closer) error {
 
 		// Update s.imm. Need a lock.
 		db.Lock()
-		y.AssertTrue(ft.mt == db.imm[0]) //For now, single threaded.
-		db.imm = db.imm[1:]
-		ft.mt.DecrRef() // Return memory.
+		//TODO: change here.
+		//y.AssertTrue(ft.mt == db.imm[0]) //For now, single threaded.
+		//db.imm = db.imm[1:]
+		//ft.mt.DecrRef() // Return memory.
 		db.Unlock()
 	}
 	return nil
@@ -815,8 +745,7 @@ func exists(path string) (bool, error) {
 		return true, nil
 	}
 	if os.IsNotExist(err) {
-		return true, os.MkdirAll(path, 0755)
-		//return false, nil
+		return false, nil
 	}
 	return true, err
 }
@@ -1001,4 +930,39 @@ func (db *DB) RunValueLogGC(discardRatio float64) error {
 		return ErrInvalidRequest
 	}
 	return db.vlog.runGC(discardRatio)
+}
+
+func (db *DB) flushMemtablePeriodically(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			for err := db.ensureRoomForWrite(); err != nil; err = db.ensureRoomForWrite() {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}
+}
+
+func (db *DB) ensureRoomForWrite() error {
+	var err error
+	db.Lock()
+	defer db.Unlock()
+
+	y.AssertTrue(db.mt != nil) // A nil mt indicates that DB is being closed.
+
+	select {
+	case db.flushChan <- flushTask{db.mt.GetLastSegment(), db.vptr}:
+		db.elog.Printf("Flushing value log to disk if async mode.")
+		// Ensure value log is synced to disk so this memtable's contents wouldn't be lost.
+		err = db.vlog.sync()
+		if err != nil {
+			return err
+		}
+		return nil
+	default:
+		// We need to do this to unlock and allow the flusher to modify imm.
+		return errNoRoom
+	}
 }

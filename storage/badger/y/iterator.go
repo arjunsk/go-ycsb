@@ -64,6 +64,7 @@ type Iterator interface {
 
 	// All iterators should be closed so that file garbage collection works.
 	Close() error
+	SeekToFirst()
 }
 
 type elem struct {
@@ -105,6 +106,11 @@ type MergeIterator struct {
 	reversed bool
 
 	all []Iterator
+}
+
+func (s *MergeIterator) SeekToFirst() {
+	//TODO implement me
+	panic("implement me")
 }
 
 // NewMergeIterator returns a new MergeIterator from a list of Iterators.

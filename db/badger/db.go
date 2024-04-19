@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/pingcap/go-ycsb/storage/badger"
-	"github.com/pingcap/go-ycsb/storage/badger/options"
 	"os"
 
 	"github.com/magiconair/properties"
@@ -108,15 +107,15 @@ func getOptions(p *properties.Properties) badger.Options {
 	//opts.ValueLogMaxEntries = uint32(p.GetUint64(badgerValueLogMaxEntries, 1000000))
 	opts.NumCompactors = p.GetInt(badgerNumCompactors, 3)
 	opts.DoNotCompact = p.GetBool(badgerDoNotCompact, false)
-	if b := p.GetString(badgerTableLoadingMode, "LoadToRAM"); len(b) > 0 {
-		if b == "FileIO" {
-			opts.TableLoadingMode = options.FileIO
-		} else if b == "LoadToRAM" {
-			opts.TableLoadingMode = options.LoadToRAM
-		} else if b == "MemoryMap" {
-			opts.TableLoadingMode = options.MemoryMap
-		}
-	}
+	//if b := p.GetString(badgerTableLoadingMode, "LoadToRAM"); len(b) > 0 {
+	//	if b == "FileIO" {
+	//		opts.TableLoadingMode = options.FileIO
+	//	} else if b == "LoadToRAM" {
+	//		opts.TableLoadingMode = options.LoadToRAM
+	//	} else if b == "MemoryMap" {
+	//		opts.TableLoadingMode = options.MemoryMap
+	//	}
+	//}
 	if b := p.GetString(badgerValueLogLoadingMode, "MemoryMap"); len(b) > 0 {
 		//if b == "FileIO" {
 		//	opts.ValueLogLoadingMode = options.FileIO

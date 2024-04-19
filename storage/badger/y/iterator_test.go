@@ -30,6 +30,11 @@ type SimpleIterator struct {
 	reversed bool
 }
 
+func (s *SimpleIterator) SeekToFirst() {
+	//TODO implement me
+	panic("implement me")
+}
+
 var (
 	closeCount int
 )

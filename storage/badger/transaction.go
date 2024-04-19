@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	farm "github.com/dgryski/go-farm"
 	"github.com/pingcap/go-ycsb/storage/badger/y"
@@ -117,7 +118,7 @@ func (o *oracle) newCommitTs(txn *Txn) uint64 {
 	if !o.isManaged {
 		// This is the general case, when user doesn't specify the read and commit ts.
 		ts = o.nextCommit
-		o.nextCommit++
+		o.nextCommit = uint64(time.Now().UnixNano())
 
 	} else {
 		// If commitTs is set, use it instead.
