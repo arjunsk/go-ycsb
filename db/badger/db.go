@@ -16,17 +16,17 @@ package badger
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/go-ycsb/storage/badger"
+	"github.com/pingcap/go-ycsb/storage/badger/options"
 	"os"
 
-	"github.com/dgraph-io/badger"
-	"github.com/dgraph-io/badger/options"
 	"github.com/magiconair/properties"
 	"github.com/pingcap/go-ycsb/pkg/prop"
 	"github.com/pingcap/go-ycsb/pkg/util"
 	"github.com/pingcap/go-ycsb/pkg/ycsb"
 )
 
-//  properties
+// properties
 const (
 	badgerDir                     = "badger.dir"
 	badgerValueDir                = "badger.valuedir"
@@ -175,7 +175,7 @@ func (db *badgerDB) Scan(ctx context.Context, table string, startKey string, cou
 		i := 0
 		for it.Seek(rowStartKey); it.Valid() && i < count; it.Next() {
 			item := it.Item()
-			value, err := item.ValueCopy(nil)
+			value, err := item.Value()
 			if err != nil {
 				return err
 			}
@@ -226,7 +226,7 @@ func (db *badgerDB) Update(ctx context.Context, table string, key string, values
 		if err != nil {
 			return err
 		}
-		return txn.Set(rowKey, buf)
+		return txn.Set(rowKey, buf, byte(0))
 	})
 	return err
 }
@@ -244,7 +244,7 @@ func (db *badgerDB) Insert(ctx context.Context, table string, key string, values
 		if err != nil {
 			return err
 		}
-		return txn.Set(rowKey, buf)
+		return txn.Set(rowKey, buf, byte(0))
 	})
 
 	return err
