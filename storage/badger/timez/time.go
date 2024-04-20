@@ -1,13 +1,12 @@
 package timez
 
 import (
-	"sync"
 	"time"
 )
 
 var (
 	ts uint64
-	mu sync.Mutex
+	//mu sync.Mutex
 )
 
 func init() {
@@ -15,8 +14,8 @@ func init() {
 }
 
 func Now() uint64 {
-	mu.Lock()
-	defer mu.Unlock()
+	//mu.Lock()
+	//defer mu.Unlock()
 	ts++
 	return ts + uint64(time.Now().UnixNano())
 }
